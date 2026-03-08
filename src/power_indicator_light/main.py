@@ -1,10 +1,10 @@
-from threading import Thread
+import threading
 import signal
+import time
 import argparse
-
 from .color_control import LightController
 from .web_ui import WebServer
-from .control_status import start_status_checks, stop_status_checks
+from .control_status import start_status_checks, stop_status_checks, reset_status
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import Field
@@ -25,56 +25,86 @@ class Settings(BaseSettings):
         extra="ignore"
     )
 
+
+class SystemManager:
+    def __init__(self, settings, args):
+        self.settings = settings
+        self.args = args
+        self.tracker = None
+        self.status_thread = None
+        self.controller = None
+        self.lock = threading.Lock() # Prevent race conditions during restart
+
+    def start_workers(self):
+        with self.lock:
+            # Import based on args
+            if self.args.mock:
+                from .mock_power_tracker import MockPowerTracker as ChosenTracker
+                from .mock_color_control import MockHub as Hub
+            else:
+                from .power_tracker import PowerTracker as ChosenTracker
+                from dirigera import Hub
+
+            hub = Hub(token=self.settings.hub_token, ip_address=self.settings.hub_ip)
+            
+            self.controller = LightController(
+                hub, 
+                self.settings.light_name, 
+                self.settings.ftp,   
+                self.settings.log_level,
+                self.settings.log_format
+            )
+
+            self.tracker = ChosenTracker(
+                power_callback=self.controller.update_light_color,
+                connected_callback=self.controller.update_connection_status,
+                device_address="DD:FB:7B:77:1F:EF",
+                log_level=self.settings.log_level,
+                log_format=self.settings.log_format
+            )
+
+            self.tracker.start()
+            self.status_thread = threading.Thread(target=start_status_checks, args=(self.controller,))
+            self.status_thread.start()
+            print("Workers initialized.")
+
+    def stop_workers(self):
+        with self.lock:
+            if self.tracker:
+                self.tracker.stop()
+            stop_status_checks()
+            if self.status_thread:
+                self.status_thread.join()
+            print("Workers stopped.")
+
+    def restart(self):
+        print("Restarting workers...")
+        self.stop_workers()
+        reset_status()
+        time.sleep(1)
+        self.settings = Settings() 
+        self.start_workers()
+
 def start():
     parser = argparse.ArgumentParser(description='Start power tracker and web UI')
     parser.add_argument('--mock', action='store_true', help='Use mock power tracker with static power')
     args = parser.parse_args()
 
     settings = Settings()
+    
+    # Initialize the manager
+    manager = SystemManager(settings, args)
+    manager.start_workers()
 
-    if args.mock:
-        from .mock_power_tracker import MockPowerTracker as ChosenTracker
-        from .mock_color_control import MockHub as Hub
-    else:
-        from .power_tracker import PowerTracker as ChosenTracker
-        from dirigera import Hub
-
-    hub = Hub(token=settings.hub_token, ip_address=settings.hub_ip)
-    controller = LightController(
-        hub, 
-        settings.light_name, 
-        settings.ftp,   
-        settings.log_level,
-        settings.log_format
-    )
-
-    tracker = ChosenTracker(
-        power_callback=controller.update_light_color,
-        connected_callback=controller.update_connection_status,
-        device_address="DD:FB:7B:77:1F:EF",
-        log_level=settings.log_level,
-        log_format=settings.log_format
-    )
-
-    tracker.start()
-
-    # Start status tracker thread
-    status_thread = Thread(target=start_status_checks, args=(controller,))
-    status_thread.start()
-
-    # Start web server in background thread
-    web_server = WebServer(settings.web_port)
+    # Pass the manager to the WebServer
+    web_server = WebServer(settings.web_port, restart_callback=manager.restart)
     web_server.start()
 
-    print(f"Power tracker started. Web UI available on port {settings.web_port}. Press Ctrl+C to exit.")
     try:
         signal.pause()
     except KeyboardInterrupt:
-        stop_status_checks()
+        manager.stop_workers()
         web_server.shutdown()
-        tracker.stop()
-        status_thread.join()
-        print("Stopped.")
 
 
 if __name__ == "__main__":

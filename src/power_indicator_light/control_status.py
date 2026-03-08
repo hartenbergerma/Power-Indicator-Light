@@ -11,13 +11,26 @@ stop_event = Event()
 
 # Simple thread-safe status store for the web UI
 _status = {
-    "hub_reachable": False,
-    "light_working": False,
-    "trainer_connected": False,
+    "hub": False,
+    "light": False,
+    "trainer": False,
     "trainer_power": 0,
     "light_color": (0.0, 0.0),
 }
 _lock = Lock()
+
+def reset_status():
+    with _lock:
+        global _status
+        global stop_event
+        _status = {
+            "hub": False,
+            "light": False,
+            "trainer": False,
+            "trainer_power": 0,
+            "light_color": (0.0, 0.0),
+        }
+        stop_event.clear()
 
 def start_status_checks(controller: "LightController"):
     """
@@ -27,8 +40,8 @@ def start_status_checks(controller: "LightController"):
     print("Status-Checker gestartet...")
     while not stop_event.is_set():
         with _lock:
-            _status["hub_reachable"] = controller.get_hub_status()
-            _status["light_working"] = controller.get_light_status()
+            _status["hub"] = controller.get_hub_status()
+            _status["light"] = controller.get_light_status()
             _status["light_color"] = controller.get_light_color()
         
         # Wartet 5 Sekunden ODER bis das Event gesetzt wird
@@ -41,7 +54,7 @@ def stop_status_checks():
 
 def set_trainer_connected(val: bool):
     with _lock:
-        _status["trainer_connected"] = bool(val)
+        _status["trainer"] = bool(val)
 
 def set_trainer_power(value: float):
     with _lock:

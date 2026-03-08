@@ -7,7 +7,7 @@
   <title>Trainer Dashboard</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.7.1/chart.min.js"></script>
   <style>
-    :root { --bg: #f1f5f9; --card: #ffffff; }
+    :root { --bg: #f1f5f9; --card: #ffffff; --danger: #ef4444; --danger-hover: #dc2626; }
     body { font-family: system-ui, sans-serif; background: var(--bg); display: flex; justify-content: center; padding: 20px; margin: 0; }
     .card { background: var(--card); width: 100%; max-width: 500px; padding: 20px; border-radius: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); }
     h1 { font-size: 1.3rem; margin: 0 0 15px 0; color: #1e293b; border-bottom: 2px solid #f1f5f9; padding-bottom: 10px; }
@@ -19,14 +19,31 @@
     .false { background: #fee2e2; color: #b91c1c; }
     .swatch { width: 18px; height: 18px; border-radius: 50%; border: 1px solid #ddd; display: inline-block; vertical-align: middle; margin-right: 8px; }
     .chart-container { margin-top: 20px; height: 200px; width: 100%; position: relative; }
+    
+    /* New Button Styles */
+    .controls { margin-top: 25px; border-top: 2px solid #f1f5f9; pt: 20px; text-align: center; }
+    .btn-restart { 
+        background: var(--danger); color: white; border: none; padding: 10px 20px; 
+        border-radius: 12px; font-weight: 600; cursor: pointer; transition: background 0.2s;
+        width: 100%; font-size: 0.9rem;
+    }
+    .btn-restart:hover { background: var(--danger-hover); }
+    .btn-restart:disabled { background: #cbd5e1; cursor: not-allowed; }
+    #restartMsg { font-size: 0.75rem; color: #64748b; margin-top: 8px; height: 1rem; }
   </style>
 </head>
 <body>
   <div class="card">
     <h1>Trainer Status</h1>
     <div id="dashboard">Lade...</div>
+    
     <div class="chart-container">
       <canvas id="powerChart"></canvas>
+    </div>
+
+    <div class="controls">
+      <button id="restartBtn" class="btn-restart" onclick="triggerRestart()">Restart System</button>
+      <div id="restartMsg"></div>
     </div>
   </div>
 
@@ -34,6 +51,7 @@
     let powerData = Array(40).fill(0);
     let colorData = Array(40).fill('rgba(200, 200, 200, 0.5)');
     let myChart = null;
+    let isRestarting = false;
 
     function getHSL(val) {
       if (!Array.isArray(val) || val.length < 2) return 'hsl(0, 0%, 80%)';
@@ -66,12 +84,10 @@
                 title: { display: true, text: 'Watt', font: { size: 10 } } 
             },
             x: { 
-                display: true, // Achse einschalten
+                display: true,
                 grid: { display: false },
                 ticks: {
-                    callback: function(value, index, ticks) {
-                        return index-39 + "s";
-                    },
+                    callback: (val, index) => index-39 + "s",
                     font: { size: 10 },
                     color: '#64748b'
                 }
@@ -82,7 +98,37 @@
       });
     }
 
+    async function triggerRestart() {
+      if (!confirm("Bist du sicher? Alle Tracker-Dienste werden neu initialisiert.")) return;
+      
+      const btn = document.getElementById('restartBtn');
+      const msg = document.getElementById('restartMsg');
+      
+      isRestarting = true;
+      btn.disabled = true;
+      msg.innerText = "Initialisiere Hardware neu...";
+
+      try {
+        const res = await fetch('/restart', { method: 'POST' });
+        if (res.ok) {
+          // Wait 5 seconds for threads to cycle before allowing another click
+          setTimeout(() => {
+            isRestarting = false;
+            btn.disabled = false;
+            msg.innerText = "System ist wieder online.";
+            setTimeout(() => { msg.innerText = ""; }, 3000);
+          }, 5000);
+        }
+      } catch (e) {
+        msg.innerText = "Fehler beim Neustart.";
+        btn.disabled = false;
+        isRestarting = false;
+      }
+    }
+
     async function update() {
+      if (isRestarting) return; // Pause updates during restart to prevent fetch errors
+      
       try {
         const res = await fetch('/status');
         const data = await res.json();
@@ -92,7 +138,7 @@
             <span class="label">${k.replace(/_/g, ' ')}</span>
             <span class="val">${
               k === 'light_color' ? `<span class="swatch" style="background:${getHSL(v)}"></span>` : 
-              typeof v === 'boolean' ? `<span class="badge ${v}">${v ? 'ON' : 'OFF'}</span>` : 
+              typeof v === 'boolean' ? `<span class="badge ${v}">${v ? 'ONLINE' : 'OFFLINE'}</span>` : 
               (v ?? '--')
             }</span>
           </div>

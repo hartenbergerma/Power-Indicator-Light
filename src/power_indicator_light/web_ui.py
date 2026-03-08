@@ -5,18 +5,18 @@ from werkzeug.serving import make_server
 from .control_status import get_status
 
 class WebServer(threading.Thread):
-    def __init__(self, port: int = 5001):
-        super().__init__(name="WebServerThread")
+    def __init__(self, port: int = 5001, restart_callback=None):
+        super().__init__(name="WebServerThread", daemon=True) # daemon=True ensures it exits when main exits
         self.port = port
+        self.restart_callback = restart_callback
         self.app = Flask(__name__)
 
+        # Mute noisy logs
         log = logging.getLogger('werkzeug')
         log.setLevel(logging.ERROR)
         
-        # Routen registrieren
         self._setup_routes()
         
-        # Server-Instanz vorbereiten (noch nicht gestartet)
         self.server = make_server("0.0.0.0", self.port, self.app)
         self.ctx = self.app.app_context()
         self.ctx.push()
@@ -30,12 +30,19 @@ class WebServer(threading.Thread):
         def status():
             return jsonify(get_status())
 
+        @self.app.route('/restart', methods=['POST'])
+        def handle_restart():
+            if self.restart_callback:
+                # Trigger the restart in a background thread so the 
+                # HTTP response can be sent before the workers stop.
+                threading.Thread(target=self.restart_callback).start()
+                return jsonify({"status": "restarting", "message": "System is rebooting..."}), 200
+            return jsonify({"status": "error", "message": "No restart callback defined"}), 500
+
     def run(self):
-        """Wird aufgerufen, wenn thread.start() ausgeführt wird."""
         print(f"Webserver startet auf Port {self.port}...")
         self.server.serve_forever()
 
     def shutdown(self):
-        """Beendet den Webserver sauber von außen."""
         print("Webserver wird beendet...")
         self.server.shutdown()
