@@ -8,7 +8,7 @@ class MockAttributes:
         self.custom_name = name
         self.is_on = True
         self.light_level = 50
-        self.color_temperature = 2700
+        self.color_temperature = 4500
         self.color_hue = 50.0
         self.color_saturation = 0.5
         self.color_mode = "temperature"

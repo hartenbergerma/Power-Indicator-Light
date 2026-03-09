@@ -33,11 +33,7 @@ def reset_status():
         stop_event.clear()
 
 def start_status_checks(controller: "LightController"):
-    """
-    Läuft in einem Thread und prüft regelmäßig den Status.
-    Bricht ab, sobald stop_event.set() aufgerufen wird.
-    """
-    print("Status-Checker gestartet...")
+    print("Status-Checker started...")
     while not stop_event.is_set():
         with _lock:
             _status["hub"] = controller.get_hub_status()
@@ -46,10 +42,9 @@ def start_status_checks(controller: "LightController"):
         
         # Wartet 5 Sekunden ODER bis das Event gesetzt wird
         stop_event.wait(timeout=5)
-    print("Status-Checker beendet.")
+    print("Status-Checker stopped.")
 
 def stop_status_checks():
-    """Signalisiert dem Thread, dass er stoppen soll."""
     stop_event.set()
 
 def set_trainer_connected(val: bool):

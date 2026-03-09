@@ -1,3 +1,5 @@
+# WattVibe
+
 # Setup
 1. Installation: From the project root run
     ```bash
@@ -12,7 +14,7 @@
     LIGHT_NAME = "Trainer"  # Name of the Light to be controlled (set in IKEA Home App)
     # WEB_PORT = 5001  # Port for the status page (optional)
     ```
-3. Start:
+3. Start WattVibe:
     ```bash
     uv run start-app
     ```

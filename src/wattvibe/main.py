@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     hub_token: str = Field(..., alias="HUB_TOKEN")
     light_name: str = Field(default="Trainer", alias="LIGHT_NAME", description="Name des Lichts in der Dirigera App")
     web_port: int = Field(default=5001, alias="WEB_PORT", description="Port für die Web UI")
-    log_level: str = Field(default="INFO", alias="LOG_LEVEL")
+    log_level: str = Field(default="WARNING", alias="LOG_LEVEL")
     log_format: str = Field(default="%(asctime)s - %(name)s - %(levelname)s - %(message)s", alias="LOG_FORMAT")
 
     model_config = SettingsConfigDict(
@@ -91,7 +91,7 @@ def start():
     args = parser.parse_args()
 
     settings = Settings()
-    
+
     manager = SystemManager(settings, args)
     manager.start_workers()
 

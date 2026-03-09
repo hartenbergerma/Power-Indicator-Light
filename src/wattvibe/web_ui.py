@@ -40,9 +40,9 @@ class WebServer(threading.Thread):
             return jsonify({"status": "error", "message": "No restart callback defined"}), 500
 
     def run(self):
-        print(f"Webserver startet auf Port {self.port}...")
+        print(f"Webserver will start at http://localhost:{self.port}")
         self.server.serve_forever()
 
     def shutdown(self):
-        print("Webserver wird beendet...")
+        print("Webserver will shut down...")
         self.server.shutdown()
